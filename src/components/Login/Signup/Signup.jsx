@@ -18,6 +18,39 @@ export default function Signup() {
   const [submitting, setSubmitting] = useState(false)
   const [created, setCreated] = useState(false)
   const [activationUrl, setActivationUrl] = useState("")
+  // Kept after the form is cleared so the panel can show the real outcome and
+  // drive a resend without asking the user to type the address again.
+  const [registeredEmail, setRegisteredEmail] = useState("")
+  const [emailSent, setEmailSent] = useState(true)
+  const [resending, setResending] = useState(false)
+
+  const handleResend = async () => {
+    if (resending || !registeredEmail) {
+      return
+    }
+
+    setResending(true)
+
+    try {
+      const res = await axios.post(`${server}/user/resend-activation`, {
+        email: registeredEmail,
+      })
+
+      setEmailSent(res.data.emailSent !== false)
+      setActivationUrl(res.data.activationUrl || "")
+
+      if (res.data.emailSent) {
+        toast.success(res.data.message)
+      } else {
+        toast.error(res.data.message)
+      }
+    } catch (err) {
+      setEmailSent(false)
+      toast.error(err.response?.data?.message || "Could not resend the email")
+    } finally {
+      setResending(false)
+    }
+  }
 
   const handleFileInputChange = (e) => {
     const file = e.target.files[0]
@@ -60,6 +93,8 @@ export default function Signup() {
       if (res.data.success === true) {
         setCreated(true)
         setActivationUrl(res.data.activationUrl || "")
+        setRegisteredEmail(email)
+        setEmailSent(res.data.emailSent !== false)
 
         // The backend answers 201 even when SMTP failed, so the "check your
         // email" toast would be a lie if emailSent is false.
@@ -101,15 +136,29 @@ export default function Signup() {
               itself) stays on screen instead of being replaced by a toast that
               disappears before it can be read. */}
           {created && (
-            <div className="mb-6 rounded-2xl border border-green-200 bg-green-50 p-5">
-              <h3 className="text-sm font-semibold text-green-900">
+            <div
+              className={`mb-6 rounded-2xl border p-5 ${
+                emailSent
+                  ? "border-green-200 bg-green-50"
+                  : "border-amber-200 bg-amber-50"
+              }`}
+            >
+              <h3
+                className={`text-sm font-semibold ${
+                  emailSent ? "text-green-900" : "text-amber-900"
+                }`}
+              >
                 Account created
               </h3>
 
-              <p className="mt-2 text-sm text-green-800">
-                We sent a verification email to the address you registered.
-                Open the link in that email to verify your account. Check the
-                spam folder if it has not arrived within a few minutes.
+              <p
+                className={`mt-2 text-sm ${
+                  emailSent ? "text-green-800" : "text-amber-800"
+                }`}
+              >
+                {emailSent
+                  ? `We sent a verification email to ${registeredEmail}. Open the link in that email to verify your account. Check the spam folder if it has not arrived within a few minutes.`
+                  : `Your account was created, but the verification email could not be sent to ${registeredEmail}. Use the button below to try again.`}
               </p>
 
               {activationUrl && (
@@ -120,6 +169,15 @@ export default function Signup() {
                   Verify account now (development only)
                 </a>
               )}
+
+              <button
+                type="button"
+                onClick={handleResend}
+                disabled={resending}
+                className="mt-4 block w-full rounded-lg border border-indigo-200 bg-white px-4 py-2 text-sm font-semibold text-indigo-700 transition-colors hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {resending ? "Sending..." : "Resend verification email"}
+              </button>
 
               <Link
                 to="/login"
