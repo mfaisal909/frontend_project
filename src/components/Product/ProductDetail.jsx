@@ -12,6 +12,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { getProductReviews, getSellerStats } from "../../redux/actions/product";
 import { resolveImageUrl, server } from "../../server";
 import { getShopId, mergeCatalog } from "../../utils/catalog";
+import { resolveSellerId } from "../../utils/messaging";
 import {
   addToWishlist,
   removeFromWishlist,
@@ -233,24 +234,29 @@ const ProductDetails = ({ data }) => {
 
    const handleMessageSubmit = async () => {
     if (!isAuthenticated || !user?._id) {
-      toast.error("Please login to create a conversation");
+      toast.error("Please login as a customer to message this shop.");
+      navigate("/login");
       return;
     }
 
-    // A bundled demo product has no real shop behind it, so there is nobody to
-    // write the conversation to. The server would reject it with a 500.
-    const sellerId = data?.shop?._id;
-
-    if (!sellerId) {
-      toast.error("This listing has no shop to message yet.");
-      return;
-    }
-
-    // Both ids are fixed-length Mongo ObjectIds, so plain concatenation is
-    // unambiguous and keeps one thread per product/shop pair.
-    const groupTitle = `${data._id}${user._id}`;
-
+    // A real product carries its shop's Mongo id; a bundled demo listing only
+    // has a numeric `shop.id` that names no account, in which case the server
+    // hands back the shop that stands in behind those listings.
     try {
+      const sellerId = await resolveSellerId(data);
+
+      if (!sellerId) {
+        toast.error(
+          "There is no shop account to message yet. Please try again later."
+        );
+        return;
+      }
+
+      // Both ids are fixed-length Mongo ObjectIds, so plain concatenation is
+      // unambiguous; the server matches the buyer/shop pair anyway, so several
+      // products of the same shop share one thread.
+      const groupTitle = `${productId}${user._id}`;
+
       const { data: response } = await axios.post(
         `${server}/conversation/create-new-conversation`,
         { groupTitle, userId: user._id, sellerId },

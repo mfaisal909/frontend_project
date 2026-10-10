@@ -6,6 +6,7 @@ import { productReducer } from './reducers/products'
 import { eventReducer } from './reducers/events'
 import { orderReducer } from './reducers/order'
 import { sellerReducer } from './reducers/seller'
+import { chatNotifyReducer } from './reducers/chatNotify'
 
 
 
@@ -18,6 +19,7 @@ const Store = configureStore({
     events: eventReducer,
     order: orderReducer,
     seller: sellerReducer,
+    chatNotify: chatNotifyReducer,
 
   },
 })

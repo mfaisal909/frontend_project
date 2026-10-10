@@ -7,11 +7,13 @@ const ShopInboxPage = () => {
   return (
     <div>
     <DashboardHeader />
-    <div className="flex items-start justify-between w-full">
-      <div className="w-[80px] 800px:w-[330px]">
+    <div className="flex items-start w-full">
+      <div className="w-[80px] shrink-0 800px:w-[330px]">
         <DashboardSideBar active={8} />
       </div>
-       <DashboardMessages />
+      <div className="min-w-0 flex-1">
+        <DashboardMessages />
+      </div>
     </div>
   </div>
   )

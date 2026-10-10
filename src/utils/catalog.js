@@ -1,4 +1,4 @@
-import { productData as localProducts } from "../static/data";
+import { productData as demoProducts } from "../static/data";
 
 export const getProductId = (product) => product?._id || product?.id;
 
@@ -37,29 +37,38 @@ export const getSoldCount = (product, soldCounts) => {
   return product?.sold_out || 0;
 };
 
-// The Redux store only knows about products that came from the API. Home page
-// sections and the product detail page merge the bundled demo catalogue in so
-// those sections stay populated when the API is empty, offline, or still
-// loading.
+// Most of the storefront lists only products that live in Mongo. A bundled demo
+// item carries a fake numeric shop id and no account behind it, so a buyer could
+// never message the seller or place a real order; restricting the catalogue to
+// real inventory keeps every card backed by a shop to talk to.
+//
+// Some sections are explicitly asked to show the bundled demo catalogue next to
+// real inventory, which `includeDemo` opts into. The demo list is appended after
+// the remote one and carries the same shape, so both halves of the catalogue
+// rank and render through the same code.
 //
 // `soldCounts` is applied here rather than in each card so every section that
-// draws from the merged catalogue ranks and displays the same numbers, and so
-// a card never has to know whether the product it was handed came from Mongo or
-// from the bundled JSON.
-export const mergeCatalog = (apiProducts, soldCounts) => {
+// draws from the catalogue ranks and displays the same numbers.
+export const mergeCatalog = (
+  apiProducts,
+  soldCounts,
+  { includeDemo = false } = {}
+) => {
   const remote = Array.isArray(apiProducts) ? apiProducts : [];
-  const seen = new Set(remote.map(getProductId));
 
-  const locals = localProducts.filter((item) => {
-    if (seen.has(item.id)) {
-      return false;
-    }
-    seen.add(item.id);
-    return true;
-  });
-
-  return [...remote, ...locals].map((item) => ({
+  const items = remote.map((item) => ({
     ...item,
     sold_out: getSoldCount(item, soldCounts),
   }));
+
+  if (!includeDemo) {
+    return items;
+  }
+
+  const demo = demoProducts.map((item) => ({
+    ...item,
+    sold_out: getSoldCount(item, soldCounts),
+  }));
+
+  return [...items, ...demo];
 };

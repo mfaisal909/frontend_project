@@ -9,7 +9,9 @@ const BestDeals = () => {
   const { allProducts, soldCounts } = useSelector((state) => state.products);
 
   const data = useMemo(() => {
-    const catalog = mergeCatalog(allProducts, soldCounts);
+    const catalog = mergeCatalog(allProducts, soldCounts, {
+      includeDemo: true,
+    });
 
     // Rank across the whole merged catalogue so real shop products and the
     // bundled demo items compete on the same measure. createdAt only breaks

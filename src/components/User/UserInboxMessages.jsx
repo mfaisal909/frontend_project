@@ -14,6 +14,7 @@ import { format } from "timeago.js";
 import { toast } from "react-toastify";
 import { server, resolveImageUrl } from "../../server";
 import socket from "../../utils/socket";
+import { acquireSocket, registerSocketUser } from "../../utils/socketConnection";
 
 // error.response is absent whenever the request never reached the server (server
 // down, CORS, offline), so the message has to be read defensively.
@@ -23,6 +24,19 @@ const toastConversationError = (error) => {
       "Could not reach the chat server. Please try again."
   );
 };
+
+// A member of a thread can be a deleted shop, or the shop info may simply not
+// be fetched yet. Passing an empty string to `src` makes the browser re-request
+// the whole page, so a real placeholder is always supplied instead.
+const SHOP_AVATAR_FALLBACK =
+  "https://dummyimage.com/128x128/e5e7eb/6b7280?text=Shop";
+
+const shopAvatarUrl = (shop) =>
+  resolveImageUrl(shop?.avatar?.url || shop?.avatar) || SHOP_AVATAR_FALLBACK;
+
+// Demo catalogue shop ids are small numbers rather than Mongo ObjectIds and can
+// never resolve against the shop endpoint, so only a real id is worth a request.
+const isObjectId = (id) => /^[a-f\d]{24}$/i.test(String(id || ""));
 
 // The buyer-side counterpart of the seller dashboard inbox. Both talk to the
 // same conversation/message endpoints and the same socket events; they differ
@@ -53,6 +67,9 @@ const UserInboxMessages = () => {
   const [reviews, setReviews] = useState([]);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  // Bumped when a live message lands outside the open thread, so the list and
+  // its previews refetch instead of staying stale until a reload.
+  const [refreshTick, setRefreshTick] = useState(0);
   const showSkeleton = loading && conversations.length === 0;
 
   const scrollRef = useRef(null);
@@ -68,12 +85,14 @@ const UserInboxMessages = () => {
   /* ================= SOCKET ================= */
 
   // Opening the socket only while the inbox is mounted keeps it off the rest of
-  // the app, which had no use for it but paid for every reconnect.
+  // the app, which had no use for it but paid for every reconnect. The
+  // connection itself is shared, so this only takes a reference and the socket
+  // outlives the inbox when another holder (the seller notifier) keeps it.
   useEffect(() => {
-    socket.connect();
+    const release = acquireSocket();
 
     return () => {
-      socket.disconnect();
+      release();
     };
   }, []);
 
@@ -81,6 +100,7 @@ const UserInboxMessages = () => {
     const onMessage = (data) => {
       setArrivalMessage({
         sender: data.senderId,
+        receiverId: data.receiverId,
         text: data.text,
         images: data.images,
         conversationId: data.conversationId,
@@ -98,7 +118,7 @@ const UserInboxMessages = () => {
   useEffect(() => {
     if (!myId) return;
 
-    socket.emit("addUser", myId);
+    const releaseUser = registerSocketUser(myId);
 
     const onUsers = (data) => {
       setOnlineUsers(Array.isArray(data) ? data : []);
@@ -108,18 +128,32 @@ const UserInboxMessages = () => {
 
     return () => {
       socket.off("getUsers", onUsers);
+      releaseUser();
     };
   }, [myId]);
 
   useEffect(() => {
+    if (!arrivalMessage) return;
+
+    // One browser can hold a seller and a buyer session on the same socket;
+    // receiverId says which of them this message was actually addressed to,
+    // so the other session must ignore it entirely.
     if (
-      !arrivalMessage ||
-      !currentChat?._id ||
-      // A message can arrive for a thread that is not open; the server has no
-      // notion of "which thread is this tab showing".
-      arrivalMessage.conversationId !== currentChat._id ||
-      !currentChat.members.includes(arrivalMessage.sender)
+      arrivalMessage.receiverId &&
+      String(arrivalMessage.receiverId) !== String(myId)
     ) {
+      return;
+    }
+
+    const isOpenThread =
+      currentChat?._id &&
+      arrivalMessage.conversationId === currentChat._id &&
+      currentChat.members.includes(arrivalMessage.sender);
+
+    if (!isOpenThread) {
+      // The thread is not open (or is brand new), so nothing can be appended;
+      // refresh the list so the preview or the new conversation shows up.
+      setRefreshTick((tick) => tick + 1);
       return;
     }
 
@@ -132,7 +166,7 @@ const UserInboxMessages = () => {
         createdAt: arrivalMessage.createdAt,
       },
     ]);
-  }, [arrivalMessage, currentChat]);
+  }, [arrivalMessage, currentChat, myId]);
 
   /* ================= GET CONVERSATIONS ================= */
 
@@ -170,7 +204,7 @@ const UserInboxMessages = () => {
     return () => {
       cancelled = true;
     };
-  }, [myId, messages]);
+  }, [myId, messages, refreshTick]);
 
   /* ================= DEEP LINK ================= */
 
@@ -203,12 +237,19 @@ const UserInboxMessages = () => {
     let cancelled = false;
 
     const getShop = async () => {
+      if (!isObjectId(shopId)) return;
+
       try {
         const response = await axios.get(`${server}/shop/get-shop-info/${shopId}`);
 
         if (!cancelled) setShopData(response.data.shop);
       } catch (error) {
-        console.log(error);
+        // A 404 means this member has no shop account (a deleted shop, say).
+        // The panel falls back to a placeholder name and avatar, so it is not
+        // an error worth surfacing.
+        if (error?.response?.status !== 404) {
+          console.log(error);
+        }
       }
     };
 
@@ -274,6 +315,7 @@ const UserInboxMessages = () => {
       senderId: myId,
       receiverId,
       text: newMessage,
+      conversationId: currentChat._id,
     });
 
     try {
@@ -309,6 +351,7 @@ const UserInboxMessages = () => {
       senderId: myId,
       receiverId,
       images: image,
+      conversationId: currentChat._id,
     });
 
     try {
@@ -553,12 +596,17 @@ const MessageList = ({ data, me, online, onOpen }) => {
     let cancelled = false;
 
     const getShop = async () => {
+      if (!isObjectId(shopId)) return;
+
       try {
         const response = await axios.get(`${server}/shop/get-shop-info/${shopId}`);
 
         if (!cancelled) setShop(response.data.shop);
       } catch (error) {
-        console.log(error);
+        // Same as above: a missing shop is an empty state, not a failure.
+        if (error?.response?.status !== 404) {
+          console.log(error);
+        }
       }
     };
 
@@ -578,7 +626,7 @@ const MessageList = ({ data, me, online, onOpen }) => {
     >
       <div className="relative flex-shrink-0">
         <img
-          src={resolveImageUrl(shop?.avatar?.url || shop?.avatar)}
+          src={shopAvatarUrl(shop)}
           alt={shop?.name || "Shop"}
           className="h-12 w-12 rounded-full border-2 border-white object-cover shadow-sm sm:h-14 sm:w-14"
           onError={(event) => {
@@ -813,7 +861,7 @@ const ConversationPanel = ({
         <div className="flex min-w-0 items-center gap-3">
           <div className="relative flex-shrink-0">
             <img
-              src={resolveImageUrl(shopData?.avatar?.url || shopData?.avatar)}
+              src={shopAvatarUrl(shopData)}
               alt={shopData?.name || "Shop"}
               className="h-11 w-11 rounded-full object-cover sm:h-12 sm:w-12"
               onError={(event) => {
@@ -880,7 +928,7 @@ const ConversationPanel = ({
               >
                 {!isMine && (
                   <img
-                    src={resolveImageUrl(shopData?.avatar?.url || shopData?.avatar)}
+                    src={shopAvatarUrl(shopData)}
                     className="h-8 w-8 flex-shrink-0 rounded-full object-cover sm:h-9 sm:w-9"
                     alt={shopData?.name || "Shop"}
                   />
@@ -891,9 +939,16 @@ const ConversationPanel = ({
                     isMine ? "items-end" : "items-start"
                   } sm:max-w-[65%]`}
                 >
-                  {item.images?.url && (
+                  {((item.images?.url &&
+                    resolveImageUrl(item.images.url)) ||
+                    (typeof item.images === "string" &&
+                      resolveImageUrl(item.images))) && (
                     <img
-                      src={item.images.url}
+                      src={
+                        item.images?.url
+                          ? resolveImageUrl(item.images.url)
+                          : resolveImageUrl(item.images)
+                      }
                       alt="Message attachment"
                       className="mb-1 max-h-[300px] max-w-[280px] rounded-xl border border-gray-100 object-cover shadow-sm sm:max-w-[320px]"
                     />

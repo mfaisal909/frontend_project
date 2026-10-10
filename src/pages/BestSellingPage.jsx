@@ -1,16 +1,29 @@
-import React, { useMemo } from 'react'
+import React, { useEffect, useMemo } from 'react'
 import Header from '../components/Login/Layout/Header'
-import { bestSellingData } from '../static/data'
+import { useDispatch, useSelector } from 'react-redux'
+import { getAllProducts } from '../redux/actions/product'
 import ProductCard from '../components/Route/Hero/ProductCard/ProductCard'
+import { mergeCatalog } from '../utils/catalog'
+import { PAGE_SIZE } from '../static/pagination'
 
-const BestSellingPage= () => {
+const BestSellingPage = () => {
+  const dispatch = useDispatch()
+  const { allProducts, soldCounts } = useSelector((state) => state.products)
 
+  useEffect(() => {
+    if (!allProducts?.length) {
+      dispatch(getAllProducts())
+    }
+  }, [dispatch, allProducts?.length])
+
+  // Highest sold first across both halves of the catalogue, capped at
+  // PAGE_SIZE items.
   const data = useMemo(
     () =>
-      bestSellingData
-        ? [...bestSellingData].sort((a, b) => b.total_sell - a.total_sell)
-        : [],
-    []
+      mergeCatalog(allProducts, soldCounts, { includeDemo: true })
+        .sort((a, b) => (b.sold_out || 0) - (a.sold_out || 0))
+        .slice(0, PAGE_SIZE),
+    [allProducts, soldCounts]
   )
 
   return (
@@ -34,7 +47,7 @@ const BestSellingPage= () => {
           {
             data && data.map((i, index) => (
               <div 
-                key={index} 
+                key={i._id || index} 
                 className="bg-white rounded-2xl shadow-sm hover:shadow-lg transition-all duration-300 p-3"
               >
                 <ProductCard data={i} />
@@ -44,7 +57,18 @@ const BestSellingPage= () => {
         </div>
 
         {/* Empty State */}
-       
+        {
+          data && data.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20">
+              <h1 className="text-2xl font-semibold text-gray-700">
+                No Products Found
+              </h1>
+              <p className="text-gray-500 mt-2">
+                Check back later for new products.
+              </p>
+            </div>
+          ) : null
+        }
       </div>
     </div>
   )

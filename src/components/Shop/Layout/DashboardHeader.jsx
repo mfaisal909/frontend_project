@@ -5,9 +5,12 @@ import { FiPackage, FiShoppingBag } from "react-icons/fi";
 import { useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import { BiMessageSquareDetail } from "react-icons/bi";
+import { selectUnread } from "../../../redux/reducers/chatNotify";
+import UnreadBadge from "./UnreadBadge";
 
 const DashboardHeader = () => {
   const seller = useSelector((state) => state.seller?.seller);
+  const unread = useSelector((state) => selectUnread(state, seller?._id));
   const sellerAvatar = seller?.avatar?.url || "https://ui-avatars.com/api/?name=" + encodeURIComponent(seller?.name || "Seller") + "&background=2563eb&color=fff";
   const sellerId = seller?._id || "dashboard";
 
@@ -36,8 +39,12 @@ const DashboardHeader = () => {
         <Link to="/dashboard-orders" className="hidden md:flex items-center justify-center">
           <FiPackage color="#555" size={28} className="cursor-pointer" />
         </Link>
-        <Link to="/dashboard-messages" className="hidden md:flex items-center justify-center">
+        <Link
+          to="/dashboard-messages"
+          className="relative hidden md:flex items-center justify-center"
+        >
           <BiMessageSquareDetail color="#555" size={28} className="cursor-pointer" />
+          <UnreadBadge count={unread} />
         </Link>
 
         <Link to={`/shop/${sellerId}`} className="flex-shrink-0">

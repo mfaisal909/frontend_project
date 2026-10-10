@@ -2,7 +2,7 @@ import './App.css'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import { server } from './server.js'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Login, Signup ,ActivationPage,HomePage,ProductsPage ,
   BestSellingPage,Event,Faq, ProductDetailsPage,
   ProfilePage,ShopOrderDetails,UserOrderDetailsPage,
@@ -35,6 +35,8 @@ import PaymentPage from './pages/PaymentPage.jsx'
 import ShopSettingsPage from './pages/Shop/ShopSettingsPage.jsx'
 import { loadStripe } from '@stripe/stripe-js'
 import { Elements } from '@stripe/react-stripe-js'
+import SellerMessageNotifier from './components/Shop/SellerMessageNotifier.jsx'
+import UserMessageNotifier from './components/User/UserMessageNotifier.jsx'
 
 const isValidStripeKey = (key) =>
   /^pk_(test|live)_[A-Za-z0-9]{10,}$/.test((key || "").trim());
@@ -60,6 +62,13 @@ const AppRoutes = () => {
   const [stripeApiKey, setStripeApiKey] = useState(null);
   const [cardPaymentsEnabled, setCardPaymentsEnabled] = useState(false);
   const { isAuthenticated }=useSelector((state)=>state.user)
+  const { pathname } = useLocation()
+
+  // Route changes do not reset the scroll position the way a full page load
+  // does, so jump back to the top on every navigation.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
 
   // The session only changes on a full page load (login/logout both call
   // window.location.reload), so load it once. Refiring it on every
@@ -317,6 +326,12 @@ const AppRoutes = () => {
           <Route path="/dashboard" element={<ShopDashboardPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      {/* Signed-in shop owners are notified of customer messages on any page,
+          so this lives above the routes rather than inside the inbox. */}
+      <SellerMessageNotifier />
+      {/* Same for the shopper: it keeps the buyer id registered with the socket
+          everywhere, otherwise messages sent while they browse are dropped. */}
+      <UserMessageNotifier />
       <ToastContainer
 position="bottom-center"
 autoClose={5000}

@@ -18,7 +18,9 @@ const ProductDetailsPage = () => {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const isEvent = searchParams.get("isEvent") === "true";
-  const items = isEvent ? allEvents : mergeCatalog(allProducts, soldCounts);
+  const items = isEvent
+    ? allEvents
+    : mergeCatalog(allProducts, soldCounts, { includeDemo: true });
   const data = items?.find((item) => String(item._id || item.id) === id);
   const isLoading = isEvent ? eventsLoading : productsLoading;
 

@@ -1,5 +1,6 @@
 
 import React, { useEffect, useState } from "react";
+import axios from "axios";
 import {
   AiFillHeart,
   AiOutlineHeart,
@@ -7,10 +8,12 @@ import {
   AiOutlineShoppingCart,
 } from "react-icons/ai";
 import { RxCross1 } from "react-icons/rx";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { addTocart } from "../../../../redux/actions/cart";
+import { server } from "../../../../server";
+import { resolveSellerId } from "../../../../utils/messaging";
 
 import {
   addToWishlist,
@@ -20,7 +23,9 @@ import {
 const ProductDetailsCard = ({ setOpen, data }) => {
   const { cart } = useSelector((state) => state.cart);
   const { wishlist } = useSelector((state) => state.wishlist);
+  const { user, isAuthenticated } = useSelector((state) => state.user);
   const dispatch = useDispatch();
+  const navigate = useNavigate();
 
   const [count, setCount] = useState(1);
   const isInWishlist = Boolean(
@@ -49,7 +54,44 @@ const ProductDetailsCard = ({ setOpen, data }) => {
     data.discount_price ?? data.discountPrice ?? data.price ?? 0;
   const original = data.price ?? data.originalPrice ?? 0;
 
-  const handleMessageSubmit = () => {};
+  // Same flow as the Send Message button on the full product page: open (or
+  // reuse) the pair's thread and land in the inbox on it.
+  const handleMessageSubmit = async () => {
+    if (!isAuthenticated || !user?._id) {
+      toast.error("Please login as a customer to message this shop.");
+      navigate("/login");
+      return;
+    }
+
+    // A real product carries its shop's Mongo id; a bundled demo listing only
+    // has a numeric `shop.id` that names no account, in which case the server
+    // hands back the shop that stands in behind those listings.
+    try {
+      const sellerId = await resolveSellerId(data);
+
+      if (!sellerId) {
+        toast.error(
+          "There is no shop account to message yet. Please try again later."
+        );
+        return;
+      }
+
+      const groupTitle = `${data._id || data.id}${user._id}`;
+
+      const { data: response } = await axios.post(
+        `${server}/conversation/create-new-conversation`,
+        { groupTitle, userId: user._id, sellerId },
+        { withCredentials: true }
+      );
+
+      navigate(`/inbox?conversationId=${response.conversation._id}`);
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message ||
+          "Could not start the conversation. Please try again."
+      );
+    }
+  };
 
   const decrementCount = () => {
     if (count > 1) {

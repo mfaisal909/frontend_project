@@ -8,8 +8,13 @@ import { CiMoneyBill, CiSettings } from "react-icons/ci";
 import { Link } from "react-router-dom";
 import { BiMessageSquareDetail } from "react-icons/bi";
 import { HiOutlineReceiptRefund } from "react-icons/hi";
+import { useSelector } from "react-redux";
+import { selectUnread } from "../../../redux/reducers/chatNotify";
+import UnreadBadge from "./UnreadBadge";
 
 const DashboardSideBar = ({ active }) => {
+  const sellerId = useSelector((state) => state.seller?.seller?._id);
+  const unread = useSelector((state) => selectUnread(state, sellerId));
   return (
     <div className="w-full h-[90vh] bg-white shadow-sm overflow-y-scroll sticky top-0 left-0 z-10">
       {/* single item */}
@@ -130,10 +135,13 @@ const DashboardSideBar = ({ active }) => {
 
       <div className="w-full flex items-center p-4">
         <Link to="/dashboard-messages" className="w-full flex items-center">
-          <BiMessageSquareDetail
-            size={30}
-            color={`${active === 8 ? "crimson" : "#555"}`}
-          />
+          <span className="relative inline-flex">
+            <BiMessageSquareDetail
+              size={30}
+              color={`${active === 8 ? "crimson" : "#555"}`}
+            />
+            <UnreadBadge count={unread} />
+          </span>
           <h5
             className={`hidden 800px:block pl-2 text-[18px] font-[400] ${
               active === 8 ? "text-[crimson]" : "text-[#555]"

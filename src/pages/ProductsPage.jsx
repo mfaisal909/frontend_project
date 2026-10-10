@@ -4,13 +4,15 @@ import { useSearchParams } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { getAllProducts } from '../redux/actions/product'
 import ProductCard from '../components/Route/Hero/ProductCard/ProductCard'
+import { mergeCatalog } from '../utils/catalog'
+import { PAGE_SIZE } from '../static/pagination'
 
 const ProductsPage = () => {
   const [searchParams] = useSearchParams()
   const categoryData = searchParams.get("category")
 
   const dispatch = useDispatch()
-  const { allProducts } = useSelector((state) => state.products)
+  const { allProducts, soldCounts } = useSelector((state) => state.products)
 
   useEffect(() => {
     if (!allProducts?.length) {
@@ -19,18 +21,22 @@ const ProductsPage = () => {
   }, [dispatch, allProducts?.length])
 
   // The listing is derived from the store, newest first, so it can never go out
-  // of sync with the products slice.
+  // of sync with the products slice. The bundled demo catalogue is merged in so
+  // a page reads as a full shelf, then capped at PAGE_SIZE items.
   const data = useMemo(() => {
-    const products = allProducts || []
-
-    const sorted = [...products].sort(
+    const sorted = mergeCatalog(allProducts, soldCounts, {
+      includeDemo: true,
+    }).sort(
       (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
     )
 
-    return categoryData === null
-      ? sorted
-      : sorted.filter((item) => item.category === categoryData)
-  }, [categoryData, allProducts])
+    const filtered =
+      categoryData === null
+        ? sorted
+        : sorted.filter((item) => item.category === categoryData)
+
+    return filtered.slice(0, PAGE_SIZE)
+  }, [categoryData, allProducts, soldCounts])
 
   return (
     <div className="bg-gray-50 min-h-screen">

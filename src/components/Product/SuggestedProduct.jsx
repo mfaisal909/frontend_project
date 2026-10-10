@@ -2,21 +2,33 @@
 import React, { useMemo } from "react";
 import { useSelector } from "react-redux";
 import ProductCard from "../Route/Hero/ProductCard/ProductCard";
+import { mergeCatalog } from "../../utils/catalog";
+
+const RELATED_COUNT = 5;
 
 const SuggestedProduct = ({ data }) => {
-  const { allProducts } = useSelector((state) => state.products);
+  const { allProducts, soldCounts } = useSelector((state) => state.products);
+
+  // Related means the same category, and nothing else: a shoe must never be
+  // offered a laptop. The whole catalogue is searched, demo included, so a
+  // product opened from a demo card still finds its neighbours. Up to five are
+  // shown; a category with fewer simply shows fewer rather than borrowing from
+  // an unrelated one.
   const productData = useMemo(() => {
-    const products = allProducts || [];
-    const currentProductId = data?._id || data?.id;
+    const products = mergeCatalog(allProducts, soldCounts, {
+      includeDemo: true,
+    });
+
+    const currentProductId = String(data?._id || data?.id);
 
     return products
       .filter(
         (product) =>
           product.category === data?.category &&
-          (product._id || product.id) !== currentProductId
+          String(product._id || product.id) !== currentProductId
       )
-      .slice(0, 5);
-  }, [allProducts, data]);
+      .slice(0, RELATED_COUNT);
+  }, [allProducts, soldCounts, data]);
 
 
   return (

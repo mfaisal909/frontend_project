@@ -10,7 +10,9 @@ const FeatureProduct = () => {
   const [listSize, setListSize] = useState(0);
 
   const products = useMemo(() => {
-    const items = mergeCatalog(allProducts, soldCounts);
+    const items = mergeCatalog(allProducts, soldCounts, {
+      includeDemo: true,
+    });
 
     // Newest shop inventory first. Demo items carry no createdAt, so they keep
     // their bundled order behind the products the shop actually created.
