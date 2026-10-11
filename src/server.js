@@ -1,5 +1,5 @@
-export const server = import.meta.env.VITE_API_URL || "http://localhost:8000/api/v2";
-const backend_url = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000/";
+export const server = import.meta.env.VITE_API_URL || "https://vercel-backend-umber-eta.vercel.app//api/v2";
+const backend_url = import.meta.env.VITE_BACKEND_URL || "https://vercel-backend-umber-eta.vercel.app/";
 export default backend_url
 
 const backendOrigin = backend_url.replace(/\/$/, "");
